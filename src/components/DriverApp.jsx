@@ -1,30 +1,41 @@
 import React, { useEffect, useState } from "react";
 
 function DriverApp() {
-    const [busId] = useState("BUS123");
-    const [routeId] = useState("ROUTE5");
+    const [busId] = useState("BUS123"); // hardcoded for demo
+    const [routeId] = useState("ROUTE5"); // assign route
     const [location, setLocation] = useState({ lat: null, lng: null });
 
     // Function to send location to backend
     const sendLocation = async (lat, lng) => {
-        await fetch("http://localhost:5000/api/driver/update-location", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ busId, latitude: lat, longitude: lng, routeId })
-        });
+        try {
+            const res = await fetch("http://localhost:5000/api/driver/update-location", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    busId,
+                    latitude: lat,
+                    longitude: lng,
+                    routeId
+                })
+            });
+            const data = await res.json();
+            console.log("✅ Location updated:", data);
+        } catch (err) {
+            console.error("❌ Error sending location:", err);
+        }
     };
 
-    // Track GPS
+    // Watch GPS continuously
     useEffect(() => {
-        if ("geolocation" in navigator) {
+        if (navigator.geolocation) {
             const watchId = navigator.geolocation.watchPosition(
                 (pos) => {
                     const { latitude, longitude } = pos.coords;
                     setLocation({ lat: latitude, lng: longitude });
                     sendLocation(latitude, longitude);
                 },
-                (err) => console.error(err),
-                { enableHighAccuracy: true, maximumAge: 0, timeout: 500 }
+                (err) => console.error("Geolocation error:", err),
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
             );
 
             return () => navigator.geolocation.clearWatch(watchId);

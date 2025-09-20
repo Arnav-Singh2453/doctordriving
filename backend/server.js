@@ -1,9 +1,10 @@
 import express from "express";
 import mongoose from "mongoose";
 import driverRoutes from "./routes/driver.js";
-
+import cors from "cors";
 const app = express();
 app.use(express.json());
+app.use(cors());
 
 // MongoDB Atlas connection
 const uri = "mongodb+srv://bora:arnav@cluster0.viblu0y.mongodb.net/sih-tracking?retryWrites=true&w=majority&appName=Cluster0";
