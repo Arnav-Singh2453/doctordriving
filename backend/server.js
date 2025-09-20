@@ -6,10 +6,7 @@ const app = express();
 const uri = "mongodb+srv://bora:arnav@cluster0.viblu0y.mongodb.net/sih-tracking?retryWrites=true&w=majority&appName=Cluster0";
 
 // Connect MongoDB
-mongoose.connect(uri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-})
+mongoose.connect(uri)
     .then(() => console.log("✅ MongoDB Connected"))
     .catch(err => {
         console.error("❌ MongoDB Error:", err.message);
@@ -25,5 +22,7 @@ app.get("/", (req, res) => {
 });
 
 // Start server
-const PORT =  5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+});
