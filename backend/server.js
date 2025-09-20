@@ -1,28 +1,29 @@
-import mongodb from "mongodb";
+import express from "express";
+import mongoose from "mongoose";
 
+const app = express();
 
-const { MongoClient, ServerApiVersion } = mongodb;
-const uri = "mongodb+srv://bora:arnav@cluster0.viblu0y.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+const uri = "mongodb+srv://bora:arnav@cluster0.viblu0y.mongodb.net/sih-tracking?retryWrites=true&w=majority&appName=Cluster0";
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const client = new MongoClient(uri, {
-    serverApi: {
-        version: ServerApiVersion.v1,
-        strict: true,
-        deprecationErrors: true,
-    }
+// Connect MongoDB
+mongoose.connect(uri, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+})
+    .then(() => console.log("✅ MongoDB Connected"))
+    .catch(err => {
+        console.error("❌ MongoDB Error:", err.message);
+
+    });
+
+// Middleware
+app.use(express.json());
+
+// Example route
+app.get("/", (req, res) => {
+    res.send("API is running...");
 });
 
-async function run() {
-    try {
-        // Connect the client to the server	(optional starting in v4.7)
-        await client.connect();
-        // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
-    } finally {
-        // Ensures that the client will close when you finish/error
-        await client.close();
-    }
-}
-run().catch(console.dir);
+// Start server
+const PORT =  5000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
