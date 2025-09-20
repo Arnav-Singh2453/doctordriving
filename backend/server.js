@@ -1,6 +1,6 @@
 import express from "express";
 import mongoose from "mongoose";
-
+import driverRoutes from "./routes/driver.js";
 const app = express();
 
 const uri = "mongodb+srv://bora:arnav@cluster0.viblu0y.mongodb.net/sih-tracking?retryWrites=true&w=majority&appName=Cluster0";
@@ -17,12 +17,14 @@ mongoose.connect(uri)
 app.use(express.json());
 
 // Example route
+
+app.use("/api/driver", driverRoutes);
 app.get("/", (req, res) => {
     res.send("API is running...");
 });
 
 // Start server
-const PORT = process.env.PORT || 5000;
+const PORT =  5000;
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
