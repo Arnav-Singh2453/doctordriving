@@ -1,6 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import driverRoutes from "./routes/driver.js";
+import authRoutes from "./routes/auth.js";
 import cors from "cors";
 const app = express();
 app.use(express.json());
@@ -18,6 +19,9 @@ mongoose.connect(uri, {
 app.get("/", (req, res) => {
     res.json({ message: "🚀 Server is running!", status: "OK" });
 });
+
+// Use authentication routes
+app.use("/api/auth", authRoutes);
 
 // Use driver routes
 app.use("/api/driver", driverRoutes);

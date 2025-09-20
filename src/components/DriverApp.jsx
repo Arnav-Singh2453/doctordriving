@@ -1,13 +1,12 @@
 import React, { useEffect, useState, useRef } from "react";
 
-function DriverApp() {
-    const [busId] = useState("BUS123"); // hardcoded for demo
-    const [routeId] = useState("ROUTE5"); // assign route
+function DriverApp({ driverData, onLogout }) {
     const [location, setLocation] = useState({ lat: null, lng: null });
     const [isTracking, setIsTracking] = useState(false);
     const [error, setError] = useState(null);
     const [lastUpdate, setLastUpdate] = useState(null);
     const [updateCount, setUpdateCount] = useState(0);
+    const [rideStarted, setRideStarted] = useState(false);
     
     const intervalRef = useRef(null);
     const watchIdRef = useRef(null);
@@ -20,10 +19,12 @@ function DriverApp() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    busId,
+                    vehicleNumber: driverData.vehicleNumber,
+                    busId: driverData.vehicleNumber,
                     latitude: lat,
                     longitude: lng,
-                    routeId
+                    routeId: driverData.routeId,
+                    driverName: driverData.driverName
                 })
             });
             
@@ -79,7 +80,7 @@ function DriverApp() {
                 { 
                     enableHighAccuracy: true, 
                     maximumAge: 1000, // Accept cached location up to 1 second old
-                    timeout: 10000 
+                    timeout: 500 
                 }
             );
         });
@@ -141,76 +142,257 @@ function DriverApp() {
         };
     }, []);
 
+    // Handle logout
+    const handleLogout = async () => {
+        if (isTracking) {
+            stopTracking();
+            // Stop tracking on server
+            try {
+                await fetch("http://localhost:3001/api/driver/stop-tracking", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ vehicleNumber: driverData.vehicleNumber })
+                });
+            } catch (err) {
+                console.error("Error stopping tracking on server:", err);
+            }
+        }
+        localStorage.removeItem("driverData");
+        onLogout();
+    };
+
+    // Start ride function
+    const startRide = () => {
+        setRideStarted(true);
+        startTracking();
+    };
+
+    // End ride function
+    const endRide = async () => {
+        setRideStarted(false);
+        stopTracking();
+        // Stop tracking on server
+        try {
+            await fetch("http://localhost:3001/api/driver/stop-tracking", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ vehicleNumber: driverData.vehicleNumber })
+            });
+        } catch (err) {
+            console.error("Error stopping tracking on server:", err);
+        }
+    };
+
     return (
-        <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-            <h2>🚍 Driver App</h2>
-            <div style={{ marginBottom: "20px" }}>
-                <p><strong>Bus ID:</strong> {busId}</p>
-                <p><strong>Route:</strong> {routeId}</p>
-            </div>
-            
-            <div style={{ marginBottom: "20px" }}>
-                <button 
-                    onClick={isTracking ? stopTracking : startTracking}
-                    style={{
-                        padding: "10px 20px",
-                        backgroundColor: isTracking ? "#dc3545" : "#28a745",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "5px",
-                        cursor: "pointer",
-                        fontSize: "16px"
-                    }}
-                >
-                    {isTracking ? "🛑 Stop Tracking" : "▶️ Start Tracking"}
-                </button>
-            </div>
-
-            <div style={{ marginBottom: "20px" }}>
-                <p><strong>Status:</strong> 
-                    <span style={{ 
-                        color: isTracking ? "#28a745" : "#6c757d",
-                        marginLeft: "10px"
-                    }}>
-                        {isTracking ? "🟢 Tracking Active" : "🔴 Tracking Stopped"}
-                    </span>
-                </p>
-                <p><strong>Updates Sent:</strong> {updateCount}</p>
-                <p><strong>Last Update:</strong> {lastUpdate || "Never"}</p>
-            </div>
-
-            <div style={{ marginBottom: "20px" }}>
-                <p><strong>Current Location:</strong></p>
-                <p><strong>Latitude:</strong> {location.lat ? location.lat.toFixed(6) : "Not available"}</p>
-                <p><strong>Longitude:</strong> {location.lng ? location.lng.toFixed(6) : "Not available"}</p>
-            </div>
-
-            {error && (
-                <div style={{
-                    backgroundColor: "#f8d7da",
-                    color: "#721c24",
-                    padding: "10px",
-                    borderRadius: "5px",
-                    marginTop: "10px"
-                }}>
-                    <strong>Error:</strong> {error}
-                </div>
-            )}
-
-            <div style={{ 
-                marginTop: "20px", 
-                padding: "10px", 
-                backgroundColor: "#f8f9fa", 
-                borderRadius: "5px",
-                fontSize: "14px"
+        <div style={{ 
+            minHeight: "100vh", 
+            backgroundColor: "#f8f9fa", 
+            fontFamily: "Arial, sans-serif" 
+        }}>
+            {/* Header */}
+            <div style={{
+                backgroundColor: "#2c3e50",
+                color: "white",
+                padding: "20px",
+                boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
             }}>
-                <p><strong>Instructions:</strong></p>
-                <ul>
-                    <li>Click "Start Tracking" to begin GPS location updates</li>
-                    <li>Location updates every 0.5 seconds automatically</li>
-                    <li>Make sure to allow location permissions in your browser</li>
-                    <li>Location data is sent to the backend server</li>
-                </ul>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                        <h1 style={{ margin: "0 0 5px 0" }}>🚍 Driver Dashboard</h1>
+                        <p style={{ margin: "0", opacity: "0.8" }}>
+                            Hello, <strong>{driverData.driverName}</strong>!
+                        </p>
+                    </div>
+                    <button
+                        onClick={handleLogout}
+                        style={{
+                            padding: "10px 15px",
+                            backgroundColor: "#dc3545",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "5px",
+                            cursor: "pointer"
+                        }}
+                    >
+                        🚪 Logout
+                    </button>
+                </div>
+            </div>
+
+            <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto" }}>
+                {/* Vehicle Info Card */}
+                <div style={{
+                    backgroundColor: "white",
+                    padding: "20px",
+                    borderRadius: "10px",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                    marginBottom: "20px"
+                }}>
+                    <h3 style={{ margin: "0 0 15px 0", color: "black" }}>🚗 Vehicle Information</h3>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
+                        <div>
+                            <p style={{ margin: "5px 0", color: "black" }}><strong>Vehicle Number:</strong> {driverData.vehicleNumber}</p>
+                            <p style={{ margin: "5px 0", color: "black" }}><strong>Driver Name:</strong> {driverData.driverName}</p>
+                        </div>
+                        <div>
+                            <p style={{ margin: "5px 0", color: "black" }}><strong>Route ID:</strong> {driverData.routeId}</p>
+                            <p style={{ margin: "5px 0", color: "black" }}><strong>Contact:</strong> {driverData.contactNumber}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                {/* Ride Control Card */}
+                <div style={{
+                    backgroundColor: "white",
+                    padding: "20px",
+                    borderRadius: "10px",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                    marginBottom: "20px"
+                }}>
+                    <h3 style={{ margin: "0 0 15px 0", color: "black" }}>🎯 Ride Control</h3>
+                    
+                    {!rideStarted ? (
+                        <div style={{ textAlign: "center" }}>
+                            <p style={{ marginBottom: "15px", color: "black" }}>
+                                Ready to start your ride? Click below to begin GPS tracking.
+                            </p>
+                            <button
+                                onClick={startRide}
+                                style={{
+                                    padding: "15px 30px",
+                                    backgroundColor: "#28a745",
+                                    color: "white",
+                                    border: "none",
+                                    borderRadius: "8px",
+                                    fontSize: "18px",
+                                    fontWeight: "bold",
+                                    cursor: "pointer",
+                                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+                                }}
+                            >
+                                🚀 Start Ride
+                            </button>
+                        </div>
+                    ) : (
+                        <div>
+                            <div style={{ 
+                                textAlign: "center", 
+                                marginBottom: "20px",
+                                padding: "10px",
+                                backgroundColor: "#d4edda",
+                                borderRadius: "5px",
+                                border: "1px solid #c3e6cb"
+                            }}>
+                                <p style={{ margin: "0", color: "#155724", fontWeight: "bold" }}>
+                                    🟢 Ride in Progress - GPS Tracking Active
+                                </p>
+                            </div>
+                            
+                            <button
+                                onClick={endRide}
+                                style={{
+                                    width: "100%",
+                                    padding: "12px",
+                                    backgroundColor: "#dc3545",
+                                    color: "white",
+                                    border: "none",
+                                    borderRadius: "5px",
+                                    fontSize: "16px",
+                                    cursor: "pointer"
+                                }}
+                            >
+                                🛑 End Ride
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* Status Card */}
+                <div style={{
+                    backgroundColor: "white",
+                    padding: "20px",
+                    borderRadius: "10px",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                    marginBottom: "20px"
+                }}>
+                    <h3 style={{ margin: "0 0 15px 0", color: "black" }}>📊 Status Information</h3>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
+                        <div>
+                            <p style={{ margin: "5px 0", color: "black" }}>
+                                <strong>Ride Status:</strong> 
+                                <span style={{ 
+                                    color: rideStarted ? "#28a745" : "#6c757d",
+                                    marginLeft: "5px"
+                                }}>
+                                    {rideStarted ? "🟢 Active" : "🔴 Stopped"}
+                                </span>
+                            </p>
+                            <p style={{ margin: "5px 0", color: "black" }}>
+                                <strong>GPS Status:</strong> 
+                                <span style={{ 
+                                    color: isTracking ? "#28a745" : "#6c757d",
+                                    marginLeft: "5px"
+                                }}>
+                                    {isTracking ? "🟢 Tracking" : "🔴 Inactive"}
+                                </span>
+                            </p>
+                        </div>
+                        <div>
+                            <p style={{ margin: "5px 0", color: "black" }}><strong>Updates Sent:</strong> {updateCount}</p>
+                            <p style={{ margin: "5px 0", color: "black" }}><strong>Last Update:</strong> {lastUpdate || "Never"}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Location Card */}
+                {rideStarted && (
+                    <div style={{
+                        backgroundColor: "white",
+                        padding: "20px",
+                        borderRadius: "10px",
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                        marginBottom: "20px"
+                    }}>
+                        <h3 style={{ margin: "0 0 15px 0", color: "black" }}>📍 Current Location</h3>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
+                            <div>
+                                <p style={{ margin: "5px 0", color: "black" }}>
+                                    <strong>Latitude:</strong> {location.lat ? location.lat.toFixed(6) : "Getting location..."}
+                                </p>
+                            </div>
+                            <div>
+                                <p style={{ margin: "5px 0", color: "black" }}>
+                                    <strong>Longitude:</strong> {location.lng ? location.lng.toFixed(6) : "Getting location..."}
+                                </p>
+                            </div>
+                        </div>
+                        <div style={{ 
+                            marginTop: "10px", 
+                            padding: "10px", 
+                            backgroundColor: "#e9ecef", 
+                            borderRadius: "5px",
+                            fontSize: "14px",
+                            color: "black"
+                        }}>
+                            📡 Location updates every 0.5 seconds while ride is active
+                        </div>
+                    </div>
+                )}
+
+                {/* Error Display */}
+                {error && (
+                    <div style={{
+                        backgroundColor: "#f8d7da",
+                        color: "#721c24",
+                        padding: "15px",
+                        borderRadius: "10px",
+                        marginBottom: "20px",
+                        border: "1px solid #f5c6cb"
+                    }}>
+                        <h4 style={{ margin: "0 0 10px 0" }}>⚠️ Error</h4>
+                        <p style={{ margin: "0" }}>{error}</p>
+                    </div>
+                )}
             </div>
         </div>
     );
