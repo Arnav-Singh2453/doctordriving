@@ -1,5 +1,260 @@
 import React, { useEffect, useState, useRef } from "react";
 
+// Map and route analytics functionality
+const useMapAndAnalytics = (currentLocation, driverData, locationHistory) => {
+    const mapRef = useRef(null);
+    const mapInstanceRef = useRef(null);
+    const driverMarkerRef = useRef(null);
+    const [mapReady, setMapReady] = useState(false);
+    const [routeAnalytics, setRouteAnalytics] = useState({
+        speed: 0,
+        distanceTraveled: 0,
+        nextStop: null,
+        estimatedTime: 0
+    });
+
+    // Tumkur to Bangalore route coordinates (real route via NH4/NH44)
+    const tumkurBangaloreRoute = [
+        [13.3422, 77.1000], // Tumkur
+        [13.3400, 77.1200], // Tumkur outskirts
+        [13.3350, 77.1500], // Sira Road
+        [13.3300, 77.1800], // Madhugiri Road
+        [13.3250, 77.2100], // Dobaspet
+        [13.0900, 77.5500], // Nelamangala
+        [13.0800, 77.5800], // Jalahalli
+        [13.0700, 77.6000], // Peenya
+        [13.0600, 77.6200], // Yeshwantpur
+        [12.9716, 77.5946]  // Bangalore (Majestic)
+    ];
+
+    // Bus stops along the route
+    const busStops = [
+        { name: "Tumkur Bus Stand", coords: [13.3422, 77.1000], id: "tumkur" },
+        { name: "Sira Road Junction", coords: [13.3350, 77.1500], id: "sira" },
+        { name: "Madhugiri Road", coords: [13.3300, 77.1800], id: "madhugiri" },
+        { name: "Dobaspet", coords: [13.3250, 77.2100], id: "dobaspet" },
+        { name: "Nelamangala", coords: [13.0900, 77.5500], id: "nelamangala" },
+        { name: "Jalahalli Cross", coords: [13.0800, 77.5800], id: "jalahalli" },
+        { name: "Peenya Industrial Area", coords: [13.0700, 77.6000], id: "peenya" },
+        { name: "Yeshwantpur", coords: [13.0600, 77.6200], id: "yeshwantpur" },
+        { name: "Bangalore Majestic", coords: [12.9716, 77.5946], id: "majestic" }
+    ];
+
+    // Load external scripts and initialize map
+    useEffect(() => {
+        const initializeMap = () => {
+            if (typeof window.L !== 'undefined' && typeof window.turf !== 'undefined') {
+                setMapReady(true);
+                return;
+            }
+            
+            // Check again after a short delay
+            setTimeout(initializeMap, 100);
+        };
+        
+        initializeMap();
+    }, []);
+
+    // Initialize map when ready
+    useEffect(() => {
+        if (!mapReady || !mapRef.current || mapInstanceRef.current) return;
+
+        console.log('🗺️ Initializing map...');
+        
+        // Initialize Leaflet map
+        const map = window.L.map(mapRef.current).setView([13.2, 77.3], 9);
+
+        // Add OpenStreetMap tiles
+        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Add route polyline
+        const routeLine = window.L.polyline(tumkurBangaloreRoute, {
+            color: '#007bff',
+            weight: 5,
+            opacity: 0.8
+        }).addTo(map);
+
+        // Add bus stops
+        busStops.forEach(stop => {
+            const stopIcon = window.L.divIcon({
+                html: `<div style="
+                    background-color: #dc3545;
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 50%;
+                    border: 2px solid white;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                "></div>`,
+                className: 'bus-stop-marker',
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
+            });
+
+            window.L.marker(stop.coords, { icon: stopIcon })
+                .addTo(map)
+                .bindPopup(`<strong>🚏 ${stop.name}</strong><br/>Bus Stop`);
+        });
+
+        // Store references
+        mapInstanceRef.current = map;
+
+        // Fit map to route bounds
+        map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
+
+        console.log('✅ Map initialized successfully');
+    }, [mapReady, tumkurBangaloreRoute, busStops]);
+
+    // Update driver location on map
+    useEffect(() => {
+        if (!mapInstanceRef.current || !currentLocation.lat || !currentLocation.lng) return;
+
+        const map = mapInstanceRef.current;
+        const { lat, lng } = currentLocation;
+
+        // Remove existing driver marker
+        if (driverMarkerRef.current) {
+            map.removeLayer(driverMarkerRef.current);
+        }
+
+        // Create custom driver icon
+        const driverIcon = window.L.divIcon({
+            html: `<div style="
+                background: linear-gradient(45deg, #28a745, #20c997);
+                width: 24px;
+                height: 24px;
+                border-radius: 50%;
+                border: 3px solid white;
+                box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 12px;
+                animation: pulse 2s infinite;
+            ">🚍</div>
+            <style>
+                @keyframes pulse {
+                    0% { transform: scale(1); }
+                    50% { transform: scale(1.1); }
+                    100% { transform: scale(1); }
+                }
+            </style>`,
+            className: 'driver-marker',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
+
+        // Add new driver marker
+        const driverMarker = window.L.marker([lat, lng], { icon: driverIcon })
+            .addTo(map)
+            .bindPopup(`
+                <div style="text-align: center; min-width: 200px;">
+                    <h4 style="margin: 0 0 10px 0; color: #28a745;">🚍 ${driverData.driverName}</h4>
+                    <p style="margin: 5px 0;"><strong>Vehicle:</strong> ${driverData.vehicleNumber}</p>
+                    <p style="margin: 5px 0;"><strong>Route:</strong> ${driverData.routeId}</p>
+                    <p style="margin: 5px 0; font-size: 12px; color: #666;">
+                        📍 ${lat.toFixed(6)}, ${lng.toFixed(6)}
+                    </p>
+                </div>
+            `);
+
+        driverMarkerRef.current = driverMarker;
+
+        // Add location to history
+        const locationPoint = {
+            lat,
+            lng,
+            timestamp: Date.now()
+        };
+        
+        // Keep only last 10 locations for performance
+        if (locationHistory.length >= 10) {
+            locationHistory.shift();
+        }
+        locationHistory.push(locationPoint);
+
+    }, [currentLocation, driverData, locationHistory]);
+
+    // Calculate route analytics using Turf.js
+    useEffect(() => {
+        if (!window.turf || !currentLocation.lat || locationHistory.length < 2) return;
+
+        try {
+            const currentPoint = window.turf.point([currentLocation.lng, currentLocation.lat]);
+            const routeLineString = window.turf.lineString(tumkurBangaloreRoute.map(coord => [coord[1], coord[0]]));
+            
+            // Find nearest point on route
+            const nearestPoint = window.turf.nearestPointOnLine(routeLineString, currentPoint);
+            
+            // Calculate distance traveled (from start of route to current position)
+            const routeStart = window.turf.point([tumkurBangaloreRoute[0][1], tumkurBangaloreRoute[0][0]]);
+            const distanceTraveled = window.turf.distance(routeStart, nearestPoint, { units: 'kilometers' });
+            
+            // Calculate speed if we have recent location history
+            let speed = 0;
+            if (locationHistory.length >= 2) {
+                const lastLocation = locationHistory[locationHistory.length - 2];
+                const currentTime = Date.now();
+                const lastTime = lastLocation.timestamp || (currentTime - 500);
+                
+                const timeDiff = (currentTime - lastTime) / 1000 / 3600; // hours
+                const lastPoint = window.turf.point([lastLocation.lng, lastLocation.lat]);
+                const distance = window.turf.distance(lastPoint, currentPoint, { units: 'kilometers' });
+                
+                if (timeDiff > 0 && distance > 0) {
+                    speed = distance / timeDiff; // km/h
+                }
+            }
+            
+            // Find next bus stop
+            let nextStop = null;
+            let minDistance = Infinity;
+            
+            busStops.forEach(stop => {
+                const stopPoint = window.turf.point([stop.coords[1], stop.coords[0]]);
+                const distance = window.turf.distance(currentPoint, stopPoint, { units: 'kilometers' });
+                
+                if (distance < minDistance && distance > 0.05) { // Only consider stops > 50m away
+                    minDistance = distance;
+                    nextStop = {
+                        ...stop,
+                        distance: distance
+                    };
+                }
+            });
+            
+            // Calculate ETA to next stop
+            let estimatedTime = 0;
+            if (nextStop && speed > 1) { // Only calculate if moving at reasonable speed
+                estimatedTime = (nextStop.distance / speed) * 60; // minutes
+            }
+            
+            setRouteAnalytics({
+                speed: Math.max(0, Math.round(speed)),
+                distanceTraveled: distanceTraveled.toFixed(1),
+                nextStop,
+                estimatedTime: Math.round(estimatedTime)
+            });
+            
+        } catch (error) {
+            console.error('Error calculating route analytics:', error);
+        }
+    }, [currentLocation, locationHistory, tumkurBangaloreRoute, busStops]);
+
+    return {
+        mapRef,
+        mapInstanceRef,
+        driverMarkerRef,
+        mapReady,
+        setMapReady,
+        routeAnalytics,
+        setRouteAnalytics,
+        tumkurBangaloreRoute,
+        busStops
+    };
+};
+
 function DriverApp({ driverData, onLogout }) {
     const [location, setLocation] = useState({ lat: null, lng: null });
     const [isTracking, setIsTracking] = useState(false);
@@ -7,9 +262,13 @@ function DriverApp({ driverData, onLogout }) {
     const [lastUpdate, setLastUpdate] = useState(null);
     const [updateCount, setUpdateCount] = useState(0);
     const [rideStarted, setRideStarted] = useState(false);
+    const [locationHistory, setLocationHistory] = useState([]);
     
     const intervalRef = useRef(null);
     const watchIdRef = useRef(null);
+    
+    // Initialize map functionality
+    const mapData = useMapAndAnalytics(location, driverData, locationHistory);
 
     // Function to send location to backend
     const sendLocation = async (lat, lng) => {
@@ -96,7 +355,15 @@ function DriverApp({ driverData, onLogout }) {
             // Get initial location
             console.log("📍 Getting initial location...");
             const initialLocation = await getCurrentLocation();
-            setLocation({ lat: initialLocation.latitude, lng: initialLocation.longitude });
+            const newLocation = { lat: initialLocation.latitude, lng: initialLocation.longitude };
+            setLocation(newLocation);
+            
+            // Add to location history
+            setLocationHistory(prev => [...prev, {
+                ...newLocation,
+                timestamp: Date.now()
+            }]);
+            
             console.log("📍 Initial location obtained, sending to backend...");
             await sendLocation(initialLocation.latitude, initialLocation.longitude);
 
@@ -104,9 +371,21 @@ function DriverApp({ driverData, onLogout }) {
             console.log("⏰ Setting up 0.5s interval for location updates...");
             intervalRef.current = setInterval(async () => {
                 try {
-                    const currentLocation = await getCurrentLocation();
-                    setLocation({ lat: currentLocation.latitude, lng: currentLocation.longitude });
-                    await sendLocation(currentLocation.latitude, currentLocation.longitude);
+                    const currentLocationData = await getCurrentLocation();
+                    const newLocation = { lat: currentLocationData.latitude, lng: currentLocationData.longitude };
+                    setLocation(newLocation);
+                    
+                    // Add to location history
+                    setLocationHistory(prev => {
+                        const updated = [...prev, {
+                            ...newLocation,
+                            timestamp: Date.now()
+                        }];
+                        // Keep only last 10 locations for performance
+                        return updated.length > 10 ? updated.slice(-10) : updated;
+                    });
+                    
+                    await sendLocation(currentLocationData.latitude, currentLocationData.longitude);
                 } catch (err) {
                     console.error("Error getting location in interval:", err);
                     setError(`Location error: ${err.message}`);
@@ -344,7 +623,7 @@ function DriverApp({ driverData, onLogout }) {
                     </div>
                 </div>
 
-                {/* Location Card */}
+                {/* Map Card */}
                 {rideStarted && (
                     <div style={{
                         backgroundColor: "white",
@@ -353,8 +632,87 @@ function DriverApp({ driverData, onLogout }) {
                         boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
                         marginBottom: "20px"
                     }}>
-                        <h3 style={{ margin: "0 0 15px 0", color: "black" }}>📍 Current Location</h3>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
+                        <h3 style={{ margin: "0 0 15px 0", color: "black" }}>🗺️ Live Route Map</h3>
+                        
+                        {/* Map Container */}
+                        <div style={{ position: 'relative', height: '400px', width: '100%', marginBottom: '15px' }}>
+                            <div 
+                                ref={mapData.mapRef} 
+                                style={{ 
+                                    height: '100%', 
+                                    width: '100%', 
+                                    borderRadius: '8px',
+                                    border: '2px solid #e9ecef'
+                                }} 
+                            />
+                            
+                            {/* Analytics Overlay */}
+                            <div style={{
+                                position: 'absolute',
+                                top: '10px',
+                                right: '10px',
+                                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                padding: '15px',
+                                borderRadius: '8px',
+                                boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                                minWidth: '200px',
+                                fontSize: '14px',
+                                color: 'black'
+                            }}>
+                                <h4 style={{ margin: '0 0 10px 0', color: 'black', fontSize: '16px' }}>📊 Route Analytics</h4>
+                                
+                                <div style={{ marginBottom: '8px' }}>
+                                    <strong>Speed:</strong> {mapData.routeAnalytics.speed} km/h
+                                </div>
+                                
+                                <div style={{ marginBottom: '8px' }}>
+                                    <strong>Distance:</strong> {mapData.routeAnalytics.distanceTraveled} km
+                                </div>
+                                
+                                {mapData.routeAnalytics.nextStop && (
+                                    <>
+                                        <div style={{ marginBottom: '8px' }}>
+                                            <strong>Next Stop:</strong><br/>
+                                            <span style={{ fontSize: '12px' }}>{mapData.routeAnalytics.nextStop.name}</span>
+                                        </div>
+                                        
+                                        <div style={{ marginBottom: '8px' }}>
+                                            <strong>Distance to Stop:</strong><br/>
+                                            {mapData.routeAnalytics.nextStop.distance.toFixed(1)} km
+                                        </div>
+                                        
+                                        {mapData.routeAnalytics.estimatedTime > 0 && (
+                                            <div>
+                                                <strong>ETA:</strong> {mapData.routeAnalytics.estimatedTime} min
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                            
+                            {/* Loading indicator */}
+                            {!mapData.mapReady && (
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '50%',
+                                    left: '50%',
+                                    transform: 'translate(-50%, -50%)',
+                                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                    padding: '20px',
+                                    borderRadius: '8px',
+                                    textAlign: 'center',
+                                    color: 'black'
+                                }}>
+                                    <div style={{ marginBottom: '10px' }}>🗺️ Loading Map...</div>
+                                    <div style={{ fontSize: '12px', color: '#666' }}>
+                                        Initializing OpenStreetMap & Route Analytics
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        
+                        {/* Location Details */}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px", marginTop: "15px" }}>
                             <div>
                                 <p style={{ margin: "5px 0", color: "black" }}>
                                     <strong>Latitude:</strong> {location.lat ? location.lat.toFixed(6) : "Getting location..."}
@@ -366,15 +724,17 @@ function DriverApp({ driverData, onLogout }) {
                                 </p>
                             </div>
                         </div>
+                        
                         <div style={{ 
-                            marginTop: "10px", 
+                            marginTop: "15px", 
                             padding: "10px", 
-                            backgroundColor: "#e9ecef", 
+                            backgroundColor: "#e7f3ff", 
                             borderRadius: "5px",
                             fontSize: "14px",
-                            color: "black"
+                            color: "black",
+                            border: "1px solid #b3d9ff"
                         }}>
-                            📡 Location updates every 0.5 seconds while ride is active
+                            📡 <strong>Live Tracking:</strong> Tumkur to Bangalore route • Updates every 0.5 seconds • Real-time speed & ETA calculations
                         </div>
                     </div>
                 )}
