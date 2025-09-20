@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .status { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>🔍 GPS Debug Test</h1>
+    
+    <div id="status" class="status info">Ready to test GPS...</div>
+    
+    <button onclick="testGPS()">Test GPS Location</button>
+    <button onclick="testBackend()">Test Backend Connection</button>
+    <button onclick="testFullFlow()">Test Full Flow</button>
+    
+    <div id="results"></div>
+
+    <script>
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        function addResult(message) {
+            const results = document.getElementById('results');
+            results.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${message}</div>`;
+        }
+
+        async function testGPS() {
+            updateStatus('Testing GPS...', 'info');
+            addResult('🔄 Testing GPS location...');
+            
+            if (!navigator.geolocation) {
+                updateStatus('GPS not supported', 'error');
+                addResult('❌ GPS not supported by this browser');
+                return;
+            }
+
+            try {
+                const position = await new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    });
+                });
+
+                const { latitude, longitude, accuracy } = position.coords;
+                updateStatus('GPS working!', 'success');
+                addResult(`✅ GPS Location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (accuracy: ${accuracy}m)`);
+            } catch (error) {
+                let errorMsg = 'Unknown GPS error';
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        errorMsg = 'Location access denied. Please allow location permissions.';
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        errorMsg = 'Location unavailable. Check GPS settings.';
+                        break;
+                    case error.TIMEOUT:
+                        errorMsg = 'Location request timed out.';
+                        break;
+                }
+                updateStatus('GPS Error', 'error');
+                addResult(`❌ GPS Error: ${errorMsg}`);
+            }
+        }
+
+        async function testBackend() {
+            updateStatus('Testing backend...', 'info');
+            addResult('🔄 Testing backend connection...');
+            
+            try {
+                const response = await fetch('http://localhost:3001/');
+                const data = await response.json();
+                updateStatus('Backend connected!', 'success');
+                addResult(`✅ Backend: ${data.message}`);
+            } catch (error) {
+                updateStatus('Backend error', 'error');
+                addResult(`❌ Backend Error: ${error.message}`);
+            }
+        }
+
+        async function testFullFlow() {
+            updateStatus('Testing full flow...', 'info');
+            addResult('🔄 Testing complete GPS + Backend flow...');
+            
+            try {
+                // Test GPS
+                const position = await new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    });
+                });
+
+                const { latitude, longitude } = position.coords;
+                addResult(`✅ GPS Location obtained: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+
+                // Test backend
+                const response = await fetch('http://localhost:3001/api/driver/update-location', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        busId: 'TEST123',
+                        latitude: latitude,
+                        longitude: longitude,
+                        routeId: 'ROUTE1'
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                updateStatus('Full flow working!', 'success');
+                addResult(`✅ Backend update successful: ${data.message}`);
+            } catch (error) {
+                updateStatus('Full flow failed', 'error');
+                addResult(`❌ Full Flow Error: ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>

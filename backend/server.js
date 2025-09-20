@@ -14,8 +14,13 @@ mongoose.connect(uri, {
     .then(() => console.log("✅ MongoDB Connected"))
     .catch(err => console.error("❌ MongoDB Error:", err));
 
+// Root route for testing
+app.get("/", (req, res) => {
+    res.json({ message: "🚀 Server is running!", status: "OK" });
+});
+
 // Use driver routes
 app.use("/api/driver", driverRoutes);
 
-const PORT = 5000;
+const PORT = 3001;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
