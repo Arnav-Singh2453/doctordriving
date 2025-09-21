@@ -40,93 +40,85 @@ const useMapAndAnalytics = (currentLocation, driverData, locationHistory) => {
         { name: "Bangalore Majestic", coords: [12.9716, 77.5946], id: "majestic" }
     ], []);
 
-    // Load external scripts and initialize map
+    // Simple map initialization
     useEffect(() => {
-        let attempts = 0;
-        const maxAttempts = 50; // 5 seconds max wait
+        // Wait for both libraries and DOM element
+        if (!mapRef.current) return;
         
-        const initializeMap = () => {
-            attempts++;
-            
-            if (typeof window.L !== 'undefined' && typeof window.turf !== 'undefined') {
-                console.log('✅ Leaflet and Turf.js loaded successfully');
-                setMapReady(true);
+        const initMap = () => {
+            if (typeof window.L === 'undefined' || typeof window.turf === 'undefined') {
+                console.log('⏳ Waiting for Leaflet and Turf.js...');
+                setTimeout(initMap, 500);
                 return;
             }
             
-            if (attempts < maxAttempts) {
-                // Check again after a short delay
-                setTimeout(initializeMap, 100);
-            } else {
-                console.error('❌ Failed to load Leaflet or Turf.js after 5 seconds');
+            if (mapInstanceRef.current) return; // Already initialized
+            
+            console.log('🗺️ Initializing map...');
+            
+            try {
+                // Create map
+                const map = window.L.map(mapRef.current, {
+                    center: [13.2, 77.3],
+                    zoom: 9,
+                    zoomControl: true,
+                    attributionControl: true
+                });
+
+                // Add tiles
+                window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19
+                }).addTo(map);
+
+                // Add route
+                const routeLine = window.L.polyline(tumkurBangaloreRoute, {
+                    color: '#007bff',
+                    weight: 5,
+                    opacity: 0.8
+                }).addTo(map);
+
+                // Add bus stops
+                busStops.forEach(stop => {
+                    window.L.circleMarker(stop.coords, {
+                        color: '#dc3545',
+                        fillColor: '#dc3545',
+                        fillOpacity: 0.8,
+                        radius: 6
+                    }).addTo(map).bindPopup(`🚏 ${stop.name}`);
+                });
+
+                // Fit bounds
+                map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
+                
+                // Store reference
+                mapInstanceRef.current = map;
+                setMapReady(true);
+                
+                console.log('✅ Map initialized successfully');
+                
+                // Force resize after a delay
+                setTimeout(() => {
+                    map.invalidateSize();
+                }, 100);
+                
+            } catch (error) {
+                console.error('❌ Map initialization error:', error);
             }
         };
         
-        initializeMap();
-    }, []);
-
-    // Initialize map when ready
-    useEffect(() => {
-        if (!mapReady || !mapRef.current || mapInstanceRef.current) return;
-
-        console.log('🗺️ Initializing map...');
-        console.log('Map container:', mapRef.current);
-        console.log('Leaflet available:', typeof window.L !== 'undefined');
+        // Start initialization
+        initMap();
         
-        try {
-            // Initialize Leaflet map
-            const map = window.L.map(mapRef.current).setView([13.2, 77.3], 9);
-
-        // Add OpenStreetMap tiles
-        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
-
-        // Add route polyline
-        const routeLine = window.L.polyline(tumkurBangaloreRoute, {
-            color: '#007bff',
-            weight: 5,
-            opacity: 0.8
-        }).addTo(map);
-
-        // Add bus stops
-        busStops.forEach(stop => {
-            const stopIcon = window.L.divIcon({
-                html: `<div style="
-                    background-color: #dc3545;
-                    width: 12px;
-                    height: 12px;
-                    border-radius: 50%;
-                    border: 2px solid white;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                "></div>`,
-                className: 'bus-stop-marker',
-                iconSize: [16, 16],
-                iconAnchor: [8, 8]
-            });
-
-            window.L.marker(stop.coords, { icon: stopIcon })
-                .addTo(map)
-                .bindPopup(`<strong>🚏 ${stop.name}</strong><br/>Bus Stop`);
-        });
-
-            // Fit map to route bounds
-            map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
-
-            // Store references
-            mapInstanceRef.current = map;
-
-            console.log('✅ Map initialized successfully');
-            
-            // Force a resize after a short delay to ensure proper rendering
-            setTimeout(() => {
-                map.invalidateSize();
-            }, 100);
-            
-        } catch (error) {
-            console.error('❌ Error initializing map:', error);
-        }
-    }, [mapReady, tumkurBangaloreRoute, busStops]);
+        // Cleanup
+        return () => {
+            if (mapInstanceRef.current) {
+                mapInstanceRef.current.remove();
+                mapInstanceRef.current = null;
+                setMapReady(false);
+            }
+        };
+    }, [tumkurBangaloreRoute, busStops]);
 
     // Update driver location on map
     useEffect(() => {
@@ -658,17 +650,21 @@ function DriverApp({ driverData, onLogout }) {
                         
                         {/* Map Container */}
                         <div style={{ position: 'relative', height: '400px', width: '100%', marginBottom: '15px' }}>
-                            {/* Add Leaflet CSS fix */}
+                            {/* Leaflet CSS Override */}
                             <style>{`
                                 .leaflet-container {
                                     height: 400px !important;
                                     width: 100% !important;
+                                    background: #f8f9fa;
                                 }
-                                .leaflet-tile {
-                                    max-width: none !important;
+                                .leaflet-tile-pane {
+                                    opacity: 1 !important;
                                 }
-                                .leaflet-tile-container {
-                                    margin: 0 !important;
+                                .leaflet-map-pane {
+                                    z-index: 1 !important;
+                                }
+                                .leaflet-control-container {
+                                    z-index: 1000 !important;
                                 }
                             `}</style>
                             <div 
@@ -679,9 +675,8 @@ function DriverApp({ driverData, onLogout }) {
                                     borderRadius: '8px',
                                     border: '2px solid #e9ecef',
                                     backgroundColor: '#f8f9fa',
-                                    position: 'relative',
-                                    zIndex: 1
-                                }}
+                                    minHeight: '400px'
+                                }} 
                             />
                             
                             {/* Analytics Overlay */}
@@ -728,35 +723,47 @@ function DriverApp({ driverData, onLogout }) {
                                 )}
                             </div>
                             
-                                {/* Loading indicator */}
-                                {!mapData.mapReady && (
+                            {/* Loading indicator */}
+                            {!mapData.mapReady && (
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '50%',
+                                    left: '50%',
+                                    transform: 'translate(-50%, -50%)',
+                                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                    padding: '20px',
+                                    borderRadius: '8px',
+                                    textAlign: 'center',
+                                    color: 'black',
+                                    zIndex: 2000,
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                                }}>
+                                    <div style={{ marginBottom: '10px', fontSize: '16px' }}>🗺️ Loading Map...</div>
+                                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
+                                        Initializing OpenStreetMap & Route Analytics
+                                    </div>
                                     <div style={{
-                                        position: 'absolute',
-                                        top: '50%',
-                                        left: '50%',
-                                        transform: 'translate(-50%, -50%)',
-                                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                                        padding: '20px',
-                                        borderRadius: '8px',
-                                        textAlign: 'center',
-                                        color: 'black',
-                                        zIndex: 1000,
-                                        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+                                        width: '100%',
+                                        height: '2px',
+                                        backgroundColor: '#e9ecef',
+                                        borderRadius: '1px',
+                                        overflow: 'hidden'
                                     }}>
-                                        <div style={{ marginBottom: '10px', fontSize: '16px' }}>🗺️ Loading Map...</div>
-                                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
-                                            Initializing OpenStreetMap & Route Analytics
-                                        </div>
-                                        <div style={{ 
-                                            width: '30px', 
-                                            height: '3px', 
-                                            backgroundColor: '#007bff', 
-                                            borderRadius: '2px',
-                                            margin: '0 auto',
-                                            animation: 'pulse 1.5s infinite'
+                                        <div style={{
+                                            width: '50%',
+                                            height: '100%',
+                                            backgroundColor: '#007bff',
+                                            animation: 'loading 1.5s infinite ease-in-out'
                                         }}></div>
                                     </div>
-                                )}
+                                    <style>{`
+                                        @keyframes loading {
+                                            0% { transform: translateX(-100%); }
+                                            100% { transform: translateX(300%); }
+                                        }
+                                    `}</style>
+                                </div>
+                            )}
                         </div>
                         
                         {/* Location Details */}
