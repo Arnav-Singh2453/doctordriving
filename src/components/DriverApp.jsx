@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 
 // Map and route analytics functionality
 const useMapAndAnalytics = (currentLocation, driverData, locationHistory) => {
@@ -14,7 +14,7 @@ const useMapAndAnalytics = (currentLocation, driverData, locationHistory) => {
     });
 
     // Tumkur to Bangalore route coordinates (real route via NH4/NH44)
-    const tumkurBangaloreRoute = [
+    const tumkurBangaloreRoute = useMemo(() => [
         [13.3422, 77.1000], // Tumkur
         [13.3400, 77.1200], // Tumkur outskirts
         [13.3350, 77.1500], // Sira Road
@@ -25,10 +25,10 @@ const useMapAndAnalytics = (currentLocation, driverData, locationHistory) => {
         [13.0700, 77.6000], // Peenya
         [13.0600, 77.6200], // Yeshwantpur
         [12.9716, 77.5946]  // Bangalore (Majestic)
-    ];
+    ], []);
 
     // Bus stops along the route
-    const busStops = [
+    const busStops = useMemo(() => [
         { name: "Tumkur Bus Stand", coords: [13.3422, 77.1000], id: "tumkur" },
         { name: "Sira Road Junction", coords: [13.3350, 77.1500], id: "sira" },
         { name: "Madhugiri Road", coords: [13.3300, 77.1800], id: "madhugiri" },
@@ -38,18 +38,28 @@ const useMapAndAnalytics = (currentLocation, driverData, locationHistory) => {
         { name: "Peenya Industrial Area", coords: [13.0700, 77.6000], id: "peenya" },
         { name: "Yeshwantpur", coords: [13.0600, 77.6200], id: "yeshwantpur" },
         { name: "Bangalore Majestic", coords: [12.9716, 77.5946], id: "majestic" }
-    ];
+    ], []);
 
     // Load external scripts and initialize map
     useEffect(() => {
+        let attempts = 0;
+        const maxAttempts = 50; // 5 seconds max wait
+        
         const initializeMap = () => {
+            attempts++;
+            
             if (typeof window.L !== 'undefined' && typeof window.turf !== 'undefined') {
+                console.log('✅ Leaflet and Turf.js loaded successfully');
                 setMapReady(true);
                 return;
             }
             
-            // Check again after a short delay
-            setTimeout(initializeMap, 100);
+            if (attempts < maxAttempts) {
+                // Check again after a short delay
+                setTimeout(initializeMap, 100);
+            } else {
+                console.error('❌ Failed to load Leaflet or Turf.js after 5 seconds');
+            }
         };
         
         initializeMap();
@@ -60,9 +70,12 @@ const useMapAndAnalytics = (currentLocation, driverData, locationHistory) => {
         if (!mapReady || !mapRef.current || mapInstanceRef.current) return;
 
         console.log('🗺️ Initializing map...');
+        console.log('Map container:', mapRef.current);
+        console.log('Leaflet available:', typeof window.L !== 'undefined');
         
-        // Initialize Leaflet map
-        const map = window.L.map(mapRef.current).setView([13.2, 77.3], 9);
+        try {
+            // Initialize Leaflet map
+            const map = window.L.map(mapRef.current).setView([13.2, 77.3], 9);
 
         // Add OpenStreetMap tiles
         window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -97,13 +110,22 @@ const useMapAndAnalytics = (currentLocation, driverData, locationHistory) => {
                 .bindPopup(`<strong>🚏 ${stop.name}</strong><br/>Bus Stop`);
         });
 
-        // Store references
-        mapInstanceRef.current = map;
+            // Fit map to route bounds
+            map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
 
-        // Fit map to route bounds
-        map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
+            // Store references
+            mapInstanceRef.current = map;
 
-        console.log('✅ Map initialized successfully');
+            console.log('✅ Map initialized successfully');
+            
+            // Force a resize after a short delay to ensure proper rendering
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 100);
+            
+        } catch (error) {
+            console.error('❌ Error initializing map:', error);
+        }
     }, [mapReady, tumkurBangaloreRoute, busStops]);
 
     // Update driver location on map
@@ -636,14 +658,30 @@ function DriverApp({ driverData, onLogout }) {
                         
                         {/* Map Container */}
                         <div style={{ position: 'relative', height: '400px', width: '100%', marginBottom: '15px' }}>
+                            {/* Add Leaflet CSS fix */}
+                            <style>{`
+                                .leaflet-container {
+                                    height: 400px !important;
+                                    width: 100% !important;
+                                }
+                                .leaflet-tile {
+                                    max-width: none !important;
+                                }
+                                .leaflet-tile-container {
+                                    margin: 0 !important;
+                                }
+                            `}</style>
                             <div 
                                 ref={mapData.mapRef} 
                                 style={{ 
-                                    height: '100%', 
+                                    height: '400px', 
                                     width: '100%', 
                                     borderRadius: '8px',
-                                    border: '2px solid #e9ecef'
-                                }} 
+                                    border: '2px solid #e9ecef',
+                                    backgroundColor: '#f8f9fa',
+                                    position: 'relative',
+                                    zIndex: 1
+                                }}
                             />
                             
                             {/* Analytics Overlay */}
@@ -690,25 +728,35 @@ function DriverApp({ driverData, onLogout }) {
                                 )}
                             </div>
                             
-                            {/* Loading indicator */}
-                            {!mapData.mapReady && (
-                                <div style={{
-                                    position: 'absolute',
-                                    top: '50%',
-                                    left: '50%',
-                                    transform: 'translate(-50%, -50%)',
-                                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                                    padding: '20px',
-                                    borderRadius: '8px',
-                                    textAlign: 'center',
-                                    color: 'black'
-                                }}>
-                                    <div style={{ marginBottom: '10px' }}>🗺️ Loading Map...</div>
-                                    <div style={{ fontSize: '12px', color: '#666' }}>
-                                        Initializing OpenStreetMap & Route Analytics
+                                {/* Loading indicator */}
+                                {!mapData.mapReady && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: '50%',
+                                        left: '50%',
+                                        transform: 'translate(-50%, -50%)',
+                                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                        padding: '20px',
+                                        borderRadius: '8px',
+                                        textAlign: 'center',
+                                        color: 'black',
+                                        zIndex: 1000,
+                                        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+                                    }}>
+                                        <div style={{ marginBottom: '10px', fontSize: '16px' }}>🗺️ Loading Map...</div>
+                                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
+                                            Initializing OpenStreetMap & Route Analytics
+                                        </div>
+                                        <div style={{ 
+                                            width: '30px', 
+                                            height: '3px', 
+                                            backgroundColor: '#007bff', 
+                                            borderRadius: '2px',
+                                            margin: '0 auto',
+                                            animation: 'pulse 1.5s infinite'
+                                        }}></div>
                                     </div>
-                                </div>
-                            )}
+                                )}
                         </div>
                         
                         {/* Location Details */}
